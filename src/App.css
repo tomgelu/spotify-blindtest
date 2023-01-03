@@ -48,7 +48,31 @@
 }
 
 .playlist-name {
-  width: 70%;
+  display: flex;
+  font-size: 1rem;
+  word-wrap: break-word;
+}
+
+.track {
+  position: fixed;
+  display: flex;
+  bottom: 0;
+  left: 0;
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  margin-bottom: 1rem;
+}
+
+.track-img {
+  display: flex;
+  width: 20%;
+  height: 20%;
+}
+
+.track-name {
+  display: flex;
   font-size: 1rem;
   word-wrap: break-word;
 }

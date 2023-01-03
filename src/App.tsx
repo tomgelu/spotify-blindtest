@@ -29,8 +29,10 @@ class App extends Component<
     showSearchResults: boolean;
     timer: number;
     searchedPlaylists: SpotifyApi.PlaylistObjectSimplified[];
-    selectedPlaylist: SpotifyApi.PlaylistObjectSimplified | null;
+    selectedPlaylistTracks: SpotifyApi.PlaylistTrackObject[] | null;
     currentTrack: SpotifyApi.TrackObjectFull | null;
+    currentTrackIndex: number;
+    trackPlayer: Generator<number> | null;
   }
 > {
   spotifyApi: spotify.SpotifyWebApiJs;
@@ -43,8 +45,10 @@ class App extends Component<
       showSearchResults: false,
       timer: 0,
       searchedPlaylists: [],
-      selectedPlaylist: null,
+      selectedPlaylistTracks: null,
       currentTrack: null,
+      currentTrackIndex: 0,
+      trackPlayer: null,
     };
     this.spotifyApi = new spotify();
     this.spotifyApi.getAccessToken = () => {
@@ -88,25 +92,25 @@ class App extends Component<
     });
   };
 
-  start = async (playlist: SpotifyApi.PlaylistObjectSimplified) => {
+  start = async (tracks: SpotifyApi.PlaylistTrackObject[]) => {
     this.setState({
       running: true,
     });
 
-    const tracks = await this.spotifyApi.getPlaylistTracks(playlist.id);
-    const shuffledTracks = this.shuffle<SpotifyApi.PlaylistTrackObject>(
-      tracks.items
-    );
+    const shuffledTracks = this.shuffle<SpotifyApi.PlaylistTrackObject>(tracks);
 
-    let currentTrack = 0;
+    this.setState({
+      currentTrackIndex: 0,
+    });
     let audioElement: HTMLAudioElement | null = null;
-
-    const playNextTrack = () => {
-      if (currentTrack < shuffledTracks.length) {
-        const track = shuffledTracks[currentTrack];
-        this.setState({
+    const that = this;
+    function* playNextTrack() {
+      while (that.state.currentTrackIndex < shuffledTracks.length) {
+        const track = shuffledTracks[that.state.currentTrackIndex];
+        that.setState({
           currentTrack: track.track as SpotifyApi.TrackObjectFull,
         });
+
         audioElement = new Audio(
           (track.track as SpotifyApi.TrackObjectFull).preview_url
         );
@@ -116,21 +120,35 @@ class App extends Component<
           if (audioElement!.currentTime >= 20) {
             audioElement!.ontimeupdate = null;
             audioElement!.pause();
-            currentTrack++;
-            playNextTrack();
           }
           if (audioElement!.currentTime >= 15) {
             const volume = lerp(audioElement!.currentTime, 15, 20);
-            audioElement!.volume = volume;
+            if (volume > 0) {
+              audioElement!.volume = volume;
+            }
           }
-          this.setState({
+          that.setState({
             timer: audioElement!.currentTime,
           });
         };
+        yield 0;
       }
-    };
+      that.setState({
+        running: false,
+        currentTrack: null,
+        selectedPlaylistTracks: null,
+        timer: 0,
+      });
+    }
 
-    playNextTrack();
+    this.setState(
+      {
+        trackPlayer: playNextTrack(),
+      },
+      () => {
+        this.state.trackPlayer!.next();
+      }
+    );
   };
 
   shuffle<T>(array: T[]) {
@@ -141,9 +159,10 @@ class App extends Component<
     return array;
   }
 
-  selectPlaylist = (playlist: SpotifyApi.PlaylistObjectSimplified) => {
+  selectPlaylist = async (playlist: SpotifyApi.PlaylistObjectSimplified) => {
+    const tracks = await this.spotifyApi.getPlaylistTracks(playlist.id);
     this.setState({
-      selectedPlaylist: playlist,
+      selectedPlaylistTracks: tracks.items,
       showSearchResults: false,
     });
   };
@@ -198,20 +217,21 @@ class App extends Component<
             </Button>
           )}
           {!this.state.showSearchResults &&
-            this.state.selectedPlaylist !== null &&
+            this.state.selectedPlaylistTracks !== null &&
             this.state.authenticated &&
             !this.state.running && (
               <Button
                 id="button"
                 onClick={(async () =>
-                  await this.start(this.state.selectedPlaylist!)).bind(this)}
+                  this.start(this.state.selectedPlaylistTracks!)).bind(this)}
               >
                 Start
               </Button>
             )}
           {this.state.currentTrack &&
             !this.state.showSearchResults &&
-            this.state.running && (
+            this.state.running &&
+            this.state.timer > 0 && (
               <div>
                 <Spinner
                   size={50}
@@ -219,17 +239,42 @@ class App extends Component<
                   intent={Intent.SUCCESS}
                 ></Spinner>
                 {this.state.timer >= 15 && (
-                  <div className="playlist">
+                  <Card className="track">
                     <img
-                      className="playlist-img"
+                      className="track-img"
                       src={this.state.currentTrack.album.images[0].url}
                     />
-                    <h3 className="playlist-name">
-                      {this.state.currentTrack.name}
-                    </h3>
-                    <Divider></Divider>
-                  </div>
+                    <div id="track-name">
+                      <h3>
+                        {this.state.currentTrack.artists
+                          .map((artist) => artist.name)
+                          .join(", ")}
+                      </h3>
+                      <h4>{this.state.currentTrack.name}</h4>
+                    </div>
+                  </Card>
                 )}
+              </div>
+            )}
+          {this.state.currentTrack &&
+            !this.state.showSearchResults &&
+            this.state.running &&
+            this.state.timer > 20 && (
+              <div>
+                <Button
+                  icon="play"
+                  onClick={() => {
+                    this.setState({
+                      timer: 0,
+                      currentTrackIndex: this.state.currentTrackIndex + 1,
+                    });
+                    if (this.state.trackPlayer) {
+                      this.state.trackPlayer.next();
+                    }
+                  }}
+                >
+                  Next
+                </Button>
               </div>
             )}
         </div>
