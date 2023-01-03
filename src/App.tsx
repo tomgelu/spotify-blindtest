@@ -67,7 +67,7 @@ class App extends Component<
 
   login(): void {
     const clientId = "dc1a3182526e4fddbc292110667c14f3";
-    const redirectUri = "http://localhost:5173";
+    const redirectUri = import.meta.env.VITE_CALLBACK_URL;
     const scopes = ["user-read-private", "user-read-email"];
 
     window.location.href = `https://accounts.spotify.com/authorize?client_id=${clientId}&redirect_uri=${redirectUri}&scope=${scopes.join(
@@ -83,7 +83,6 @@ class App extends Component<
     this.setState({
       searchedPlaylists: playlists,
     });
-    console.log(playlists);
     this.setState({
       showSearchResults: true,
     });
